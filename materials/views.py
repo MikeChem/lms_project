@@ -1,10 +1,15 @@
-from rest_framework import viewsets, generics
+from rest_framework import viewsets, generics, status
+
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
-from .models import Course, Lesson
-from .serializers import CourseSerializer, LessonSerializer
-from users.permissions import IsModerator, IsOwnerOrModeratorReadOnly  # ← добавлен IsOwnerOrModeratorReadOnly
+from materials.models import Course, Lesson, Subscription
+from materials.serializers import CourseSerializer, LessonSerializer
+from users.permissions import IsModerator, IsOwnerOrModeratorReadOnly
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from materials.models import Course, Subscription
 
-
+# ViewSet для курсов
 class CourseViewSet(viewsets.ModelViewSet):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
@@ -14,15 +19,16 @@ class CourseViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             self.permission_classes = [~IsModerator & IsAuthenticated]  # Не модератор может создать
         elif self.action in ['update', 'partial_update']:
-            self.permission_classes = [IsOwnerOrModeratorReadOnly]  # Модератор или владелец
+            self.permission_classes = [IsOwnerOrModeratorReadOnly]     # Модератор или владелец
         elif self.action == 'destroy':
-            self.permission_classes = [IsOwnerOrModeratorReadOnly]  # Удалить может только владелец
+            self.permission_classes = [IsOwnerOrModeratorReadOnly]     # Удалить может только владелец
         return super().get_permissions()
 
     def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)  # Привязка к владельцу
+        serializer.save(owner=self.request.user)  # Привязка к пользователю при создании
 
 
+# Generic для уроков
 class LessonListCreateView(generics.ListCreateAPIView):
     queryset = Lesson.objects.all()
     serializer_class = LessonSerializer
@@ -30,18 +36,51 @@ class LessonListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == 'POST':
-            self.permission_classes = [~IsModerator & IsAuthenticated]  # Создание — не модератор
+            self.permission_classes = [~IsModerator & IsAuthenticated]
         return super().get_permissions()
 
     def perform_create(self, serializer):
-        course = serializer.validated_data['course']
+        course_id = self.kwargs.get('course_id') or self.request.data.get('course')
+        course = Course.objects.get(id=course_id)
         serializer.save(owner=self.request.user, course=course)
 
 
 class LessonRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Lesson.objects.all()
     serializer_class = LessonSerializer
-    permission_classes = [IsOwnerOrModeratorReadOnly]  # Редактирование и просмотр: владелец или модератор
+    permission_classes = [IsOwnerOrModeratorReadOnly]  # Владелец или модератор
 
-    def perform_update(self, serializer):
-        serializer.save(owner=self.request.user)  # Можно оставить, если хочешь обновлять владельца
+    def get_queryset(self):
+        return Lesson.objects.filter(pk=self.kwargs['pk'])
+
+
+# APIView для подписки
+class SubscriptionAPIView(APIView):
+    def post(self, request, *args, **kwargs):
+        user = request.user
+        course_id = request.data.get('course_id')
+
+        if not course_id:
+            return Response(
+                {"error": "Не указан course_id"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            course_item = Course.objects.get(id=course_id)
+        except Course.DoesNotExist:
+            return Response(
+                {"error": "Курс не найден"},
+                status=status.HTTP_400_BAD_REQUEST  # ← Меняем сюда
+            )
+
+        subs_item = Subscription.objects.filter(user=user, course=course_item)
+
+        if subs_item.exists():
+            subs_item.delete()
+            message = 'подписка удалена'
+        else:
+            Subscription.objects.create(user=user, course=course_item)
+            message = 'подписка добавлена'
+
+        return Response({"message": message}, status=status.HTTP_200_OK)
