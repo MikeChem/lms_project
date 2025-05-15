@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'materials',
     'django_filters',
     'rest_framework_simplejwt',
+    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -107,7 +108,17 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',  # Все эндпоинты требуют авторизации
-    )
+    ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'LMS Project API',
+    'DESCRIPTION': 'Платформа управления курсами и уроками',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SWAGGER_UI_SETTINGS': {'deepLinking': True},
 }
 
 # Настройки JWT
@@ -141,3 +152,6 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+SUCCESS_URL = os.getenv('SUCCESS_URL')
+CANCEL_URL = os.getenv('CANCEL_URL')

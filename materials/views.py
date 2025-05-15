@@ -1,4 +1,4 @@
-from rest_framework import viewsets, generics, status
+from rest_framework import viewsets, generics, status, serializers
 
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from materials.models import Course, Lesson, Subscription
@@ -8,12 +8,13 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from materials.models import Course, Subscription
-
+from django.db.models import Count
 # ViewSet для курсов
+from django.db.models import Count
+
 class CourseViewSet(viewsets.ModelViewSet):
-    queryset = Course.objects.all()
+    queryset = Course.objects.annotate(lessons_count=Count('course'))
     serializer_class = CourseSerializer
-    permission_classes = [IsAuthenticated]
 
     def get_permissions(self):
         if self.action == 'create':
@@ -41,7 +42,15 @@ class LessonListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         course_id = self.kwargs.get('course_id') or self.request.data.get('course')
-        course = Course.objects.get(id=course_id)
+
+        if not course_id:
+            raise serializers.ValidationError({"course": "Не указан course"})
+
+        try:
+            course = Course.objects.get(id=course_id)
+        except Course.DoesNotExist:
+            raise serializers.ValidationError({"course": "Курс не найден"})
+
         serializer.save(owner=self.request.user, course=course)
 
 

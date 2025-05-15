@@ -11,7 +11,7 @@ urlpatterns = [
     path('', include(router.urls)),
 
     # Маршруты для уроков (Generic-классы)
-    path('lessons/', LessonListCreateView.as_view(), name='lesson-list'),
+    path('lessons/<int:course_id>/', LessonListCreateView.as_view(), name='lesson-list'),
     path('lessons/<int:pk>/', LessonRetrieveUpdateDestroyView.as_view(), name='lesson-detail'),
     path('subscribe/', SubscriptionAPIView.as_view(), name='subscribe'),
 ]
