@@ -1,5 +1,4 @@
 from rest_framework import viewsets, generics, status, serializers
-
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from materials.models import Course, Lesson, Subscription
 from materials.serializers import CourseSerializer, LessonSerializer
@@ -9,6 +8,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from materials.models import Course, Subscription
 from django.db.models import Count
+from django.shortcuts import get_object_or_404
+from django.http import Http404
+
 # ViewSet для курсов
 from django.db.models import Count
 
@@ -58,9 +60,6 @@ class LessonRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Lesson.objects.all()
     serializer_class = LessonSerializer
     permission_classes = [IsOwnerOrModeratorReadOnly]  # Владелец или модератор
-
-    def get_queryset(self):
-        return Lesson.objects.filter(pk=self.kwargs['pk'])
 
 
 # APIView для подписки

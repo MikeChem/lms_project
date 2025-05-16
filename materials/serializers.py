@@ -1,14 +1,17 @@
-from .models import Course, Lesson
+from .models import Lesson
 from .validators import validate_youtube_url  # ← Импортируем валидатор
 from rest_framework import serializers
-from .models import Course, Subscription
+from .models import Subscription, Course  # <-- Импортируем Course
+
 from drf_spectacular.utils import extend_schema_serializer
+
 class LessonSerializer(serializers.ModelSerializer):
     video_url = serializers.URLField(validators=[validate_youtube_url])  # ← валидация
 
     class Meta:
         model = Lesson
-        fields = ['id', 'title', 'description', 'preview', 'video_url', 'course']
+        fields = ['id', 'title', 'description', 'preview', 'video_url', 'course', 'owner']
+        read_only_fields = ['owner']
 
 
 from drf_spectacular.utils import extend_schema_serializer
@@ -24,6 +27,7 @@ class CourseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Course
         fields = ['id', 'title', 'description', 'owner', 'lessons', 'lessons_count', 'is_subscribed','stripe_product_id', 'stripe_price_id']
+        read_only_fields = ['owner', 'stripe_product_id', 'stripe_price_id']
 
     def get_lessons_count(self, obj):
         return obj.course.count()  # или .lessons.count(), если есть related_name='lessons'
@@ -33,8 +37,3 @@ class CourseSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             return Subscription.objects.filter(user=request.user, course=obj).exists()
         return False
-
-lessons_count = serializers.SerializerMethodField()
-
-def get_lessons_count(self, obj):
-    return obj.lessons.count()
