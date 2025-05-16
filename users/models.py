@@ -1,31 +1,21 @@
 from django.db import models
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
+from .managers import CustomUserManager  # ← будем использовать кастомный менеджер
 
 
 class User(AbstractUser):
     username = None  # Отключаем username
-    email = models.EmailField(unique=True, verbose_name='Email')
+    email = models.EmailField(unique=True)
 
-    phone = models.CharField(max_length=20, blank=True, null=True, verbose_name='Телефон')
-    city = models.CharField(max_length=100, blank=True, null=True, verbose_name='Город')
-    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, verbose_name='Аватарка')
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
+    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []
+    REQUIRED_FIELDS = []  # Теперь не нужно указывать обязательные поля
 
-    groups = models.ManyToManyField(
-        'auth.Group',
-        related_name='custom_user_groups',
-        blank=True,
-        verbose_name='Группы'
-    )
-    user_permissions = models.ManyToManyField(
-        'auth.Permission',
-        related_name='custom_user_permissions',
-        blank=True,
-        verbose_name='Права пользователя'
-    )
+    objects = CustomUserManager()  # Используем кастомный менеджер
 
     def __str__(self):
         return self.email
