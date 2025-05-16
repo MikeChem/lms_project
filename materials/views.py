@@ -1,5 +1,3 @@
-from rest_framework import viewsets, generics, status
-
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from materials.models import Course, Lesson, Subscription
 from materials.serializers import CourseSerializer, LessonSerializer
@@ -11,9 +9,7 @@ from materials.models import Course, Subscription
 
 # ViewSet для курсов
 class CourseViewSet(viewsets.ModelViewSet):
-    queryset = Course.objects.all()
     serializer_class = CourseSerializer
-    permission_classes = [IsAuthenticated]
 
     def get_permissions(self):
         if self.action == 'create':
@@ -49,9 +45,6 @@ class LessonRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Lesson.objects.all()
     serializer_class = LessonSerializer
     permission_classes = [IsOwnerOrModeratorReadOnly]  # Владелец или модератор
-
-    def get_queryset(self):
-        return Lesson.objects.filter(pk=self.kwargs['pk'])
 
 
 # APIView для подписки

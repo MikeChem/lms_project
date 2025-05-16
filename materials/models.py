@@ -21,12 +21,10 @@ class Course(models.Model):
         verbose_name = 'Курс'
         verbose_name_plural = 'Курсы'
 
-
 class Lesson(models.Model):
     course = models.ForeignKey(
         Course,
         on_delete=models.CASCADE,
-        related_name='lessons',
         verbose_name='Курс'
     )
     title = models.CharField(max_length=255, verbose_name='Название урока')

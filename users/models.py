@@ -34,29 +34,20 @@ class Payment(models.Model):
     )
     payment_date = models.DateTimeField(auto_now_add=True, verbose_name='Дата оплаты')
     course = models.ForeignKey(
-        'materials.Course',  # ← Указываем строкой для избежания циклического импорта
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         verbose_name='Оплаченный курс'
     )
     lesson = models.ForeignKey(
-        'materials.Lesson',  # ← Указываем строкой
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         verbose_name='Оплаченный урок'
     )
-    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Сумма оплаты')
-    payment_method = models.CharField(
-        max_length=10,
-        choices=PAYMENT_METHOD_CHOICES,
-        default='TRANSFER',
-        verbose_name='Способ оплаты'
     )
 
     def __str__(self):
-        return f"{self.user} - {self.amount} ({self.get_payment_method_display()})"
 
     class Meta:
         verbose_name = 'Платёж'

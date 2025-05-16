@@ -4,7 +4,6 @@ from users.models import User
 from django.contrib.auth.models import Group
 from rest_framework import status
 
-
 class LessonAPITestCase(APITestCase):
     def setUp(self):
         # Создаем пользователей без использования username
@@ -39,7 +38,6 @@ class LessonAPITestCase(APITestCase):
 
     def test_lesson_list(self):
         """Проверяет, что список уроков доступен"""
-        response = self.client.get('/api/materials/lessons/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_lesson_create(self):
@@ -48,11 +46,8 @@ class LessonAPITestCase(APITestCase):
         data = {
             'title': 'Новый урок',
             'course': self.course.id,
-            'video_url': 'https://youtube.com/watch?v=new123 '
         }
-        response = self.client.post('/api/materials/lessons/', data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(Lesson.objects.count(), 2)
 
     def test_moderator_cannot_create_lesson(self):
         """Модератор не может создать урок"""
@@ -60,15 +55,12 @@ class LessonAPITestCase(APITestCase):
         data = {
             'title': 'Не должен быть создан',
             'course': self.course.id,
-            'video_url': 'https://youtube.com/watch?v=bad123 '
         }
-        response = self.client.post('/api/materials/lessons/', data)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_update_lesson_by_owner(self):
         """Владелец может обновлять урок"""
         self.client.force_authenticate(user=self.admin)
-        data = {'title': 'Обновлённое название'}
         response = self.client.patch(f'/api/materials/lessons/{self.lesson.id}/', data)
         self.lesson.refresh_from_db()
         self.assertEqual(self.lesson.title, 'Обновлённое название')
@@ -77,10 +69,8 @@ class LessonAPITestCase(APITestCase):
     def test_delete_lesson_by_owner(self):
         """Владелец может удалить урок"""
         self.client.force_authenticate(user=self.admin)
-        response = self.client.delete(f'/api/materials/lessons/{self.lesson.id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(Lesson.objects.count(), 0)
-
 
 # Тесты подписки на курс
 class SubscriptionAPITestCase(APITestCase):
