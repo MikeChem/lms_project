@@ -1,0 +1,103 @@
+services:
+  # База данных
+  db:
+    image: postgres:16
+    container_name: lms_db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Redis
+  redis:
+    image: redis:7
+    container_name: lms_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # MailHog — для тестирования email
+  mailhog:
+    image: mailhog/mailhog
+    container_name: lms_mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+
+  # Django приложение
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lms_web
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    environment:
+      - DB_HOST=db
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_URL=redis://redis:6379/0
+      - EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+      - EMAIL_HOST=mailhog
+      - EMAIL_PORT=1025
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+      - mailhog
+    volumes:
+      - .:/app
+      - media:/app/media
+
+  # Celery Worker
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lms_celery_worker
+    command: celery -A config worker --loglevel=info --pool=solo
+    environment:
+      - DB_HOST=db
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - .:/app
+
+  # Celery Beat
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lms_celery_beat
+    command: celery -A config beat --loglevel=info
+    environment:
+      - DB_HOST=db
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - CELERY_BEAT_SCHEDULER=django_celery_beat.schedulers:DatabaseScheduler
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:
+  redis_data:
+  media:
