@@ -9,6 +9,9 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    strategy:
+      cache: false # Отключаем кэширование
+
     services:
       postgres:
         image: postgres:16
@@ -31,8 +34,12 @@ jobs:
       - name: Setup Docker & Docker Compose
         run: |
           sudo apt update
+          sudo apt clean
+          sudo apt remove --purge containerd.io
           sudo apt install -y docker.io docker-compose
           sudo apt install -y containerd  # Установим containerd явно
+          sudo docker system prune -af
+          docker builder prune -a -f
 
       - name: Build Docker images
         run: |
