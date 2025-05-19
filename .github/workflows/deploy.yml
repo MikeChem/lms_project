@@ -1,14 +1,18 @@
 name: CI/CD Pipeline with Docker Deploy
+
 on:
   push:
     branches:
       - develop
       - feature_8_docker
+
+strategy:
+  cache: false # Отключаем кэширование
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    strategy:
-      cache: false
+
     services:
       postgres:
         image: postgres:16
@@ -17,12 +21,17 @@ jobs:
           POSTGRES_USER: ${{ secrets.DB_USER }}
           POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
         ports:
-          - 5432:5432
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s
+          - "5432:5432"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
           --health-retries 5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
       - name: Setup Docker & Docker Compose
         run: |
           sudo apt update
@@ -32,70 +41,61 @@ jobs:
           sudo apt install -y containerd  # Установим containerd явно
           sudo docker system prune -af
           docker builder prune -a -f
+
       - name: Build Docker images
         run: |
           docker-compose build
+
       - name: Start db and dependencies
         run: |
           docker-compose up -d db redis mailhog
+
       - name: Wait for PostgreSQL to be ready
-        run: >
-          until docker-compose exec -T db pg_isready -h db -U $DB_USER -d $DB_NAME;
-          do
+        run: |
+          until docker-compose exec -T db pg_isready -h db -U $DB_USER -d $DB_NAME; do
             echo "⏳ Waiting for PostgreSQL..."
             sleep 5
           done
+
       - name: Run tests in Django container
         run: |
           docker-compose run --rm web python manage.py test
+
   deploy:
     needs: build-test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-      - name: Copy necessary files
-        run: >
-          rsync -avz --delete --exclude '.git' --exclude '.env' --exclude
-          'staticfiles'  ./ ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST
-          }}:~/lms_project
 
+      - name: Copy necessary files
+        run: |
+          rsync -avz --delete --exclude '.git' --exclude '.env' --exclude 'staticfiles'  ./ ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/lms_project
           rsync -avz --delete ./nginx.conf ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/lms_project/nginx.conf
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: >
+          script: |
             cd ~/lms_project
 
-
             echo "Pulling latest changes..."
-
             git pull origin develop # Или feature_8_docker, в зависимости от ветки
 
-
             echo "Stopping old containers..."
-
             docker-compose down
 
-
             echo "Pulling Latest Docker Images..."
-
             docker-compose pull
 
-
             echo "Starting containers..."
-
             docker-compose up -d
 
-
             echo "Apply migrations..."
-
             docker-compose exec web python manage.py migrate
 
-
             echo "Collect static files..."
-
             docker-compose exec web python manage.py collectstatic --noinput
