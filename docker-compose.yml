@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # База данных
   db:
@@ -8,11 +10,12 @@ services:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
 
   # Redis
   redis:
@@ -22,6 +25,8 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - backend
 
   # MailHog — для тестирования email
   mailhog:
@@ -30,6 +35,8 @@ services:
     ports:
       - "1025:1025"  # SMTP
       - "8025:8025"  # Web UI
+    networks:
+      - backend
 
   # Django приложение
   web:
@@ -37,27 +44,25 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: lms_web
-    command: >
-      sh -c "python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
-    environment:
-      - DB_HOST=db
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - REDIS_URL=redis://redis:6379/0
-      - EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-      - EMAIL_HOST=mailhog
-      - EMAIL_PORT=1025
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000
     ports:
       - "8001:8000"
     depends_on:
       - db
       - redis
       - mailhog
+    environment:
+      - DB_HOST=db
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_URL=redis://redis:6379/0
     volumes:
       - .:/app
-      - media:/app/media
+      - static_volume:/app/static
+      - media_volume:/app/media
+    networks:
+      - backend
 
   # Celery Worker
   celery-worker:
@@ -65,18 +70,20 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: lms_celery_worker
-    command: celery -A config worker --loglevel=info --pool=solo
+    command: celery -A config worker --loglevel=info
+    depends_on:
+      - db
+      - redis
     environment:
       - DB_HOST=db
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - CELERY_BROKER_URL=redis://redis:6379/0
-    depends_on:
-      - db
-      - redis
     volumes:
       - .:/app
+    networks:
+      - backend
 
   # Celery Beat
   celery-beat:
@@ -85,19 +92,26 @@ services:
       dockerfile: Dockerfile
     container_name: lms_celery_beat
     command: celery -A config beat --loglevel=info
+    depends_on:
+      - db
+      - redis
     environment:
       - DB_HOST=db
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
+      - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_BEAT_SCHEDULER=django_celery_beat.schedulers:DatabaseScheduler
-    depends_on:
-      - db
-      - redis
     volumes:
       - .:/app
+    networks:
+      - backend
 
 volumes:
   postgres_data:
   redis_data:
-  media:
+  static_volume:
+  media_volume:
+
+networks:
+  backend:
