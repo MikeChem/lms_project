@@ -1,4 +1,4 @@
-name: CI/CD Pipeline with Docker Deploy
+name: CI/CD Pipeline with Docker
 
 on:
   push:
@@ -9,9 +9,6 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    strategy:
-      cache: false # Отключаем кэширование
-
     services:
       postgres:
         image: postgres:16
@@ -34,12 +31,7 @@ jobs:
       - name: Setup Docker & Docker Compose
         run: |
           sudo apt update
-          sudo apt clean
-          sudo apt remove --purge containerd.io
           sudo apt install -y docker.io docker-compose
-          sudo apt install -y containerd  # Установим containerd явно
-          sudo docker system prune -af
-          docker builder prune -a -f
 
       - name: Build Docker images
         run: |
@@ -56,9 +48,17 @@ jobs:
             sleep 5
           done
 
+      - name: Apply migrations
+        run: |
+          docker-compose run --rm web python manage.py migrate
+
       - name: Run tests in Django container
         run: |
           docker-compose run --rm web python manage.py test
+
+      - name: Run linter (flake8)
+        run: |
+          docker-compose run --rm web flake8 .
 
   deploy:
     needs: build-test
@@ -67,11 +67,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Copy necessary files
-        run: |
-          rsync -avz --delete --exclude '.git' --exclude '.env' --exclude 'staticfiles'  ./ ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/lms_project
-          rsync -avz --delete ./nginx.conf ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/lms_project/nginx.conf
-
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
@@ -79,22 +74,19 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd ~/lms_project
+            echo "Syncing project files..."
+            rsync -avz --delete . ~/lms_project || true
 
-            echo "Pulling latest changes..."
-            git pull origin develop # Или feature_8_docker, в зависимости от ветки
+            cd ~/lms_project
 
             echo "Stopping old containers..."
             docker-compose down
 
-            echo "Pulling Latest Docker Images..."
-            docker-compose pull
-
-            echo "Starting containers..."
-            docker-compose up -d
+            echo "Building and restarting containers..."
+            docker-compose up -d --build
 
             echo "Apply migrations..."
             docker-compose exec web python manage.py migrate
 
             echo "Collect static files..."
-            docker-compose exec web python manage.py collectstatic --noinput
+            docker-compose exec web python manage.py collectstatic --noinput --clear
