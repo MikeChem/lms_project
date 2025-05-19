@@ -1,8 +1,9 @@
-name: CI/CD Pipeline with Docker
+name: CI/CD Pipeline with Docker Deploy
 
 on:
   push:
     branches:
+      - develop
       - feature_8_docker
 
 jobs:
@@ -12,9 +13,9 @@ jobs:
       postgres:
         image: postgres:16
         env:
+          POSTGRES_DB: ${{ secrets.DB_NAME }}
           POSTGRES_USER: ${{ secrets.DB_USER }}
           POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          POSTGRES_DB: ${{ secrets.DB_NAME }}
         ports:
           - "5432:5432"
         options: >-
@@ -27,22 +28,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Install Docker Compose
+      - name: Set up Docker Compose
         run: |
-          sudo curl -L "https://github.com/docker/compose/releases/download/v2.26.1/docker-compose- $(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
-
-      - name: Check Docker Compose version
-        run: docker-compose --version
+          DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
+          mkdir -p $DOCKER_CONFIG/cli-plugins
+          curl -SL https://github.com/docker/compose/releases/download/v2.26.1/docker-compose-linux-x86_64  -o $DOCKER_CONFIG/cli-plugins/docker-compose
+          chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
+          docker compose version
 
       - name: Build Docker images
         run: |
           docker-compose build
 
-      - name: Run tests inside Django container
+      - name: Run tests in Django container
         run: |
           docker-compose run --rm web python manage.py test
 
@@ -66,27 +64,19 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            # Переходим в папку проекта или создаём, если нет
             mkdir -p ~/lms_project
             cd ~/lms_project
+            echo "Syncing project files..."
+            rsync -avz --delete . ~/lms_project/
 
-            echo "Очистка старых файлов..."
-            rm -rf ./* .env .gitignore || true
-
-            echo "Копируем новые файлы..."
-            rsync -avz --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' ../ ~/lms_project/
-
-            echo "Проверяем наличие .env"
-            if [ ! -f .env ]; then
-              cp .env.example .env
-            fi
-
-            echo "Подтягиваем изменения и пересобираем..."
+            echo "Stopping old containers..."
             docker-compose down
+
+            echo "Building and restarting containers..."
             docker-compose up -d --build
 
-            echo "Миграции..."
+            echo "Apply migrations..."
             docker-compose exec web python manage.py migrate
 
-            echo "Статика..."
-            docker-compose exec web python manage.py collectstatic --noinput --clear
+            echo "Collect static files..."
+            docker-compose exec web python manage.py collectstatic --noinput
