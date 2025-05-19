@@ -44,6 +44,7 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_PORT: ${{ secrets.DB_PORT }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
           DATABASE_URL: postgresql://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:${{ secrets.DB_PORT }}/${{ secrets.DB_NAME }}
         run: |
           python manage.py migrate
@@ -54,6 +55,7 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_PORT: ${{ secrets.DB_PORT }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }} # Важно передать SECRET_KEY
         run: python manage.py test
 
   deploy:
@@ -75,5 +77,8 @@ jobs:
             pip install -r requirements.txt
             python manage.py migrate
             python manage.py collectstatic --noinput
+            # Активируем переменные окружения из .env
+            export $(cat .env | xargs)  # Это должно подтянуть и SECRET_KEY
+            #Restart Gunicorn
             kill -9 $(pidof gunicorn) || true
             gunicorn config.wsgi:application --bind 0.0.0.0:8000 &
