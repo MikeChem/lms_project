@@ -28,10 +28,43 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Setup Docker & Docker Compose
+      - name: Remove old Docker versions
+        run: |
+          sudo apt remove -y docker docker-engine docker.io containerd runc || true
+          sudo apt autoremove -y
+
+      - name: Setup Docker
         run: |
           sudo apt update
-          sudo apt install -y docker.io docker-compose
+          sudo apt install -y \
+            apt-transport-https \
+            ca-certificates \
+            curl \
+            software-properties-common
+
+          # Добавляем ключ Docker
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg  | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+          # Добавляем репозиторий Docker
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+          # Обновляем пакеты
+          sudo apt update
+
+          # Устанавливаем Docker с разрешением downgrades
+          sudo apt install -y --allow-downgrades docker-ce docker-ce-cli containerd.io
+
+          # Проверяем установку
+          docker --version
+
+      - name: Install Docker Compose
+        run: |
+          DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
+          mkdir -p $DOCKER_CONFIG/cli-plugins
+          curl -SL https://github.com/docker/compose/releases/download/v2.26.1/docker-compose-linux-x86_64  -o $DOCKER_CONFIG/cli-plugins/docker-compose
+          chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
+          sudo ln -s $DOCKER_CONFIG/cli-plugins/docker-compose /usr/local/bin/docker-compose
+          docker-compose --version
 
       - name: Build Docker images
         run: |
@@ -90,3 +123,5 @@ jobs:
 
             echo "Collect static files..."
             docker-compose exec web python manage.py collectstatic --noinput --clear
+
+            echo "Restart Celery workers if needed..."
