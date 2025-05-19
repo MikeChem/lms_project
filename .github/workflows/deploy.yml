@@ -28,18 +28,38 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install Docker & Docker Compose
+      - name: Setup Docker & Docker Compose
         run: |
-          sudo apt update
-          sudo apt install -y docker.io
+          # Удаление старых версий Docker
+          sudo apt remove -y docker docker-engine docker.io containerd runc || true
+          sudo apt autoremove -y
 
+          # Обновление системы
+          sudo apt update
+          sudo apt upgrade -y
+
+          # Установка зависимостей
+          sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
+
+          # Добавление официального репозитория Docker
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg  | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+          # Обновляем пакеты
+          sudo apt update
+
+          # Устанавливаем Docker
+          sudo apt install -y docker-ce docker-ce-cli containerd.io
+
+          # Устанавливаем Docker Compose
           DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
           mkdir -p $DOCKER_CONFIG/cli-plugins
           curl -SL https://github.com/docker/compose/releases/download/v2.26.1/docker-compose-linux-x86_64  -o $DOCKER_CONFIG/cli-plugins/docker-compose
           chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
           sudo ln -s $DOCKER_CONFIG/cli-plugins/docker-compose /usr/local/bin/docker-compose
 
-          docker-compose --version
+          # Проверяем установку
+          docker --version && docker-compose --version
 
       - name: Build Docker images
         run: |
