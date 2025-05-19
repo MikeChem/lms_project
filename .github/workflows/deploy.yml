@@ -1,4 +1,4 @@
-name: CI/CD Pipeline with Docker Deploy
+name: CI/CD Pipeline with Docker
 
 on:
   push:
@@ -13,9 +13,9 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: ${{ secrets.DB_NAME }}
           POSTGRES_USER: ${{ secrets.DB_USER }}
           POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.DB_NAME }}
         ports:
           - "5432:5432"
         options: >-
@@ -30,36 +30,8 @@ jobs:
 
       - name: Setup Docker & Docker Compose
         run: |
-          # Удаление старых версий Docker
-          sudo apt remove -y docker docker-engine docker.io containerd runc || true
-          sudo apt autoremove -y
-
-          # Обновление системы
           sudo apt update
-          sudo apt upgrade -y
-
-          # Установка зависимостей
-          sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
-
-          # Добавление официального репозитория Docker
-          curl -fsSL https://download.docker.com/linux/ubuntu/gpg  | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-          # Обновляем пакеты
-          sudo apt update
-
-          # Устанавливаем Docker
-          sudo apt install -y docker-ce docker-ce-cli containerd.io
-
-          # Устанавливаем Docker Compose
-          DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
-          mkdir -p $DOCKER_CONFIG/cli-plugins
-          curl -SL https://github.com/docker/compose/releases/download/v2.26.1/docker-compose-linux-x86_64  -o $DOCKER_CONFIG/cli-plugins/docker-compose
-          chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
-          sudo ln -s $DOCKER_CONFIG/cli-plugins/docker-compose /usr/local/bin/docker-compose
-
-          # Проверяем установку
-          docker --version && docker-compose --version
+          sudo apt install -y docker.io docker-compose
 
       - name: Build Docker images
         run: |
@@ -80,6 +52,10 @@ jobs:
         run: |
           docker-compose run --rm web python manage.py test
 
+      - name: Run linter (flake8)
+        run: |
+          docker-compose run --rm web flake8 .
+
   deploy:
     needs: build-test
     runs-on: ubuntu-latest
@@ -87,12 +63,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Setup SSH Key
-        uses: webfactory/ssh-agent@v0.11.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Copy files and deploy via SSH
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -101,17 +72,19 @@ jobs:
           script: |
             echo "Syncing project files..."
             rsync -avz --delete . ~/lms_project || true
-            
+
             cd ~/lms_project
-            
+
             echo "Stopping old containers..."
             docker-compose down
-            
+
             echo "Building and restarting containers..."
             docker-compose up -d --build
-            
+
             echo "Apply migrations..."
             docker-compose exec web python manage.py migrate
-            
+
             echo "Collect static files..."
-            docker-compose exec web python manage.py collectstatic --noinput
+            docker-compose exec web python manage.py collectstatic --noinput --clear
+
+            echo "Restart Celery workers if needed..."
