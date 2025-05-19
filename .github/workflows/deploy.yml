@@ -3,7 +3,7 @@ name: CI/CD Pipeline
 on:
   push:
     branches:
-      - feature_8_docker # Запускать workflow при push в ветку develop
+      - feature_8_docker
 
 jobs:
   test:
@@ -11,7 +11,7 @@ jobs:
     services:
       postgres:
         image: postgres:latest
-        environment:
+        env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: password
           POSTGRES_DB: test_db
@@ -42,26 +42,23 @@ jobs:
         run: python manage.py test
 
   deploy:
-    needs: test  # Этот job запустится только после успешного завершения job test
+    needs: test
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
+      - uses: actions/checkout@v3
       - name: Deploy to server
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.SSH_HOST }}  # IP-адрес вашего сервера
-          username: ${{ secrets.SSH_USERNAME }}  # Имя пользователя на сервере
-          key: ${{ secrets.SSH_PRIVATE_KEY }}  # Приватный ключ SSH
-          port: 22  # Порт SSH (по умолчанию 22)
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
           script: |
             cd ~/lms_project
-            git pull origin feature_8_docker # Pull changes from feature_8_docker branch
+            git pull origin feature_8_docker
             source venv/bin/activate
-            pip install -r requirements.txt  # Обновить зависимости
+            pip install -r requirements.txt
             python manage.py migrate
             python manage.py collectstatic --noinput
-            #Restart Gunicorn
             kill -9 $(pidof gunicorn) || true
             gunicorn config.wsgi:application --bind 0.0.0.0:8000 &
