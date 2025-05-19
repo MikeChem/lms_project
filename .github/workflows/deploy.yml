@@ -106,17 +106,21 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             echo "Syncing project files..."
-            cd ~
-            rm -rf ~/lms_project || true
-            mkdir -p ~/lms_project
-            rsync -avz --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' . ~/lms_project/
+            rsync -avz --delete . ~/lms_project/
 
             echo "进入到 проекта"
             cd ~/lms_project
 
+            # Если файлы внутри подпапки — заходим туда
+            if [ -d "lms_project" ]; then
+              cd lms_project
+            fi
+
             echo "Проверяем наличие docker-compose.yml"
+            ls -la | grep docker-compose.yml
+
             if [ ! -f docker-compose.yml ]; then
-              echo "❌ Файл docker-compose.yml отсутствует!"
+              echo "❌ docker-compose.yml отсутствует!"
               exit 1
             else
               echo "✅ docker-compose.yml найден."
@@ -125,13 +129,11 @@ jobs:
             echo "Останавливаем старые контейнеры..."
             docker-compose down
 
-            echo "Собираем и запускаем контейнеры..."
+            echo "Building and restarting containers..."
             docker-compose up -d --build
 
-            echo "Применяем миграции..."
+            echo "Apply migrations..."
             docker-compose exec web python manage.py migrate
 
-            echo "Собираем статику..."
-            docker-compose exec web python manage.py collectstatic --noinput --clear
-
-            echo "Деплой завершён ✅"
+            echo "Collect static files..."
+            docker-compose exec web python manage.py collectstatic --noinput
