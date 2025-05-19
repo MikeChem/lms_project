@@ -6,12 +6,11 @@ on:
       - develop
       - feature_8_docker
 
-strategy:
-  cache: false # Отключаем кэширование
-
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    strategy:
+      cache: false # Отключаем кэширование
 
     services:
       postgres:
