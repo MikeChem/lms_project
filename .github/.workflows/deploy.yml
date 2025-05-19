@@ -3,7 +3,7 @@ name: CI/CD Pipeline
 on:
   push:
     branches:
-      - develop  # Запускать workflow при push в ветку develop
+      - feature_8_docker # Запускать workflow при push в ветку develop
 
 jobs:
   test:
