@@ -28,13 +28,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Docker Compose
+      - name: Install Docker & Docker Compose
         run: |
+          sudo apt update
+          sudo apt install -y docker.io
+
           DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
           mkdir -p $DOCKER_CONFIG/cli-plugins
           curl -SL https://github.com/docker/compose/releases/download/v2.26.1/docker-compose-linux-x86_64  -o $DOCKER_CONFIG/cli-plugins/docker-compose
           chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
-          docker compose version
+          sudo ln -s $DOCKER_CONFIG/cli-plugins/docker-compose /usr/local/bin/docker-compose
+
+          docker-compose --version
 
       - name: Build Docker images
         run: |
@@ -43,3 +48,39 @@ jobs:
       - name: Run tests in Django container
         run: |
           docker-compose run --rm web python manage.py test
+
+  deploy:
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup SSH Key
+        uses: webfactory/ssh-agent@v0.5
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Copy files and deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "Syncing project files..."
+            rsync -avz --delete . ~/lms_project || true
+
+            cd ~/lms_project
+
+            echo "Stopping old containers..."
+            docker-compose down
+
+            echo "Building and restarting containers..."
+            docker-compose up -d --build
+
+            echo "Apply migrations..."
+            docker-compose exec web python manage.py migrate
+
+            echo "Collect static files..."
+            docker-compose exec web python manage.py collectstatic --noinput
