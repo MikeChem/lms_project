@@ -1,16 +1,18 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+# materials/urls.py
+from django.urls import path
+from . import views
 
-from materials.views import CourseViewSet, LessonListCreateView, LessonRetrieveUpdateDestroyView, SubscriptionAPIView
-# Создаём роутер для ViewSet'а (курсов)
-router = DefaultRouter()
-router.register(r'courses', CourseViewSet, basename='course')
+app_name = 'materials'  # Namespace для URL
 
 urlpatterns = [
-    # Подключаем маршруты от роутера
-    path('', include(router.urls)),
+    # Courses
+    path('courses/', views.CourseViewSet.as_view({'get': 'list', 'post': 'create'}), name='course-list'),
+    path('courses/<int:pk>/', views.CourseViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='course-detail'),
 
-    # Маршруты для уроков (Generic-классы)
-    path('lessons/<int:pk>/', LessonRetrieveUpdateDestroyView.as_view(), name='lesson-detail'),
-    path('subscribe/', SubscriptionAPIView.as_view(), name='subscribe'),
+    # Lessons
+    path('lessons/', views.LessonListCreateView.as_view(), name='lesson-list'),
+    path('lessons/<int:pk>/', views.LessonRetrieveUpdateDestroyView.as_view(), name='lesson-detail'),
+
+    # Subscriptions
+    path('subscribe/', views.SubscriptionAPIView.as_view(), name='subscription-create'),
 ]
