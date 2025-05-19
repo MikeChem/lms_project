@@ -12,9 +12,9 @@ jobs:
       postgres:
         image: postgres:latest
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres  # Используем postgres
+          POSTGRES_PASSWORD: Mike_Lash007  # Используем предоставленный пароль
+          POSTGRES_DB: test_db  # Используем test_db (можно изменить)
         ports:
           - "5432:5432"
         options: >-
@@ -35,7 +35,7 @@ jobs:
           pip install -r requirements.txt
       - name: Set up database
         env:
-          DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
+          DATABASE_URL: postgresql://postgres:Mike_Lash007@localhost:5432/test_db  # Используем DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
         run: |
           python manage.py migrate
       - name: Run tests
@@ -45,7 +45,8 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
       - name: Deploy to server
         uses: appleboy/ssh-action@master
         with:
