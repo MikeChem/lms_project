@@ -1,17 +1,32 @@
-name: CI/CD Pipeline with Docker
+name: CI/CD Pipeline
 
 on:
   push:
     branches:
-      - develop
       - feature_8_docker
 
 jobs:
-  build-test:
-    # ... (пока не трогаем этот блок)
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Docker
+        run: |
+          sudo apt update && \
+          sudo apt install -y docker.io docker-compose
+
+      - name: Build and Test
+        run: |
+          cd lms_project
+          docker-compose build
+          docker-compose up -d db redis
+          sleep 10
+          docker-compose exec web python manage.py test
 
   deploy:
-    needs: build-test
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -24,23 +39,14 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            echo " Переходим в каталог проекта"
-            cd ~/lms_project || { echo "❌ Директория ~/lms_project не найдена"; exit 1; }
-
-            echo " Получаем последние изменения из Git"
+            cd ~/lms_project || exit
             git stash || true
             git fetch origin
             git checkout feature_8_docker
             git pull origin feature_8_docker
 
-            echo " Останавливаем текущие контейнеры"
-            docker compose down || true
-
-            echo " Запускаем сборку и обновление контейнеров"
+            docker compose down
             docker compose up -d --build
 
-            echo " Выполняем миграции"
             docker compose exec web python manage.py migrate --noinput
-
-            echo " Собираем статические файлы"
             docker compose exec web python manage.py collectstatic --noinput
