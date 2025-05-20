@@ -3,7 +3,6 @@ name: CI/CD Pipeline with Docker
 on:
   push:
     branches:
-      - develop
       - feature_8_docker
 
 jobs:
@@ -28,41 +27,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Remove old Docker versions
-        run: |
-          sudo apt remove -y docker docker-engine docker.io containerd runc || true
-          sudo apt autoremove -y
-
-      - name: Setup Docker
+      - name: Setup Docker & Docker Compose
         run: |
           sudo apt update
-          sudo apt install -y \
-            apt-transport-https \
-            ca-certificates \
-            curl \
-            software-properties-common
-
-          # Добавляем ключ Docker
-          curl -fsSL https://download.docker.com/linux/ubuntu/gpg  | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-
-          # Добавляем репозиторий Docker
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-          # Обновляем пакеты и устанавливаем Docker
-          sudo apt update
-          sudo apt install -y --allow-downgrades docker-ce docker-ce-cli containerd.io
-
-          # Проверяем установку
-          docker --version
-
-      - name: Install Docker Compose
-        run: |
-          DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
-          mkdir -p $DOCKER_CONFIG/cli-plugins
-          curl -SL https://github.com/docker/compose/releases/download/v2.26.1/docker-compose-linux-x86_64  -o $DOCKER_CONFIG/cli-plugins/docker-compose
-          chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
-          sudo ln -s $DOCKER_CONFIG/cli-plugins/docker-compose /usr/local/bin/docker-compose
-          docker-compose --version
+          sudo apt install -y docker.io docker-compose
 
       - name: Build Docker images
         run: |
@@ -108,25 +76,9 @@ jobs:
             echo "Syncing project files..."
             rsync -avz --delete . ~/lms_project/
 
-            echo "进入到 проекта"
             cd ~/lms_project
 
-            # Если файлы внутри подпапки — заходим туда
-            if [ -d "lms_project" ]; then
-              cd lms_project
-            fi
-
-            echo "Проверяем наличие docker-compose.yml"
-            ls -la | grep docker-compose.yml
-
-            if [ ! -f docker-compose.yml ]; then
-              echo "❌ docker-compose.yml отсутствует!"
-              exit 1
-            else
-              echo "✅ docker-compose.yml найден."
-            fi
-
-            echo "Останавливаем старые контейнеры..."
+            echo "Stopping old containers..."
             docker-compose down
 
             echo "Building and restarting containers..."
