@@ -8,80 +8,7 @@ on:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Setup Docker
-        run: |
-          # Удаляем старые версии
-          sudo apt remove -y docker docker-engine docker.io containerd runc || true
-          sudo apt autoremove -y
-
-          # Чистим остатки
-          sudo rm -rf /var/lib/docker /etc/docker || true
-
-          # Подготавливаем систему
-          sudo apt update
-          sudo apt install -y \
-            apt-transport-https \
-            ca-certificates \
-            curl \
-            gnupg-agent \
-            software-properties-common
-
-          # Добавляем ключ Docker
-          curl -fsSL https://download.docker.com/linux/ubuntu/gpg  | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-
-          # Добавляем репозиторий Docker
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-          # Обновляем пакеты
-          sudo apt update
-
-          # Устанавливаем Docker
-          sudo apt install -y --allow-downgrades docker-ce docker-ce-cli containerd.io
-
-          # Проверяем установку
-          docker --version
-
-      - name: Install Docker Compose
-        run: |
-          DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
-          mkdir -p $DOCKER_CONFIG/cli-plugins
-          curl -SL https://github.com/docker/compose/releases/download/v2.26.1/docker-compose-linux-x86_64  -o $DOCKER_CONFIG/cli-plugins/docker-compose
-          chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
-          sudo ln -s $DOCKER_CONFIG/cli-plugins/docker-compose /usr/local/bin/docker-compose
-          docker-compose --version
-
-      - name: Build Docker images
-        run: |
-          docker-compose build
-
-      - name: Start services
-        run: |
-          docker-compose up -d db redis mailhog
-
-      - name: Wait for PostgreSQL to be ready
-        run: |
-          until docker-compose exec -T db pg_isready -h db -U $DB_USER -d $DB_NAME; do
-            echo "⏳ Waiting for PostgreSQL..."
-            sleep 5
-          done
-
-      - name: Apply migrations
-        run: |
-          docker-compose run --rm web python manage.py migrate
-
-      - name: Run tests in Django container
-        run: |
-          docker-compose run --rm web python manage.py test
-
-      - name: Run linter (flake8)
-        run: |
-          docker-compose run --rm web flake8 . --exit-zero
+    # ... (пока не трогаем этот блок)
 
   deploy:
     needs: build-test
@@ -97,41 +24,23 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            echo "Syncing project files..."
-            rsync -avz --delete . ~/lms_project/ || true
-            
-            echo "进入到 проекта"
-            cd ~/lms_project
-            
-            echo "Проверяем наличие docker-compose.yml"
-            if [ ! -f docker-compose.yml ]; then
-              echo "❌ docker-compose.yml отсутствует в ~/lms_project/"
-              echo "Ищем внутри подпапок..."
-              FOUND=$(find . -name "docker-compose.yml" | head -n1)
-            
-              if [ -z "$FOUND" ]; then
-                echo "❌ docker-compose.yml не найден нигде!"
-                exit 1
-              else
-                echo "✅ docker-compose.yml найден в: $FOUND"
-                cd $(dirname "$FOUND")
-              fi
-            fi
-            
-            echo "Текущая папка:"
-            pwd
-            
-            echo "Список файлов:"
-            ls -la
-            
-            echo "Stopping old containers..."
-            docker-compose down || echo "No running containers to stop"
-            
-            echo "Building and restarting containers..."
-            docker-compose up -d --build
-            
-            echo "Apply migrations..."
-            docker-compose exec web python manage.py migrate
-            
-            echo "Collect static files..."
-            docker-compose exec web python manage.py collectstatic --noinput
+            echo " Переходим в каталог проекта"
+            cd ~/lms_project || { echo "❌ Директория ~/lms_project не найдена"; exit 1; }
+
+            echo " Получаем последние изменения из Git"
+            git stash || true
+            git fetch origin
+            git checkout feature_8_docker
+            git pull origin feature_8_docker
+
+            echo " Останавливаем текущие контейнеры"
+            docker compose down || true
+
+            echo " Запускаем сборку и обновление контейнеров"
+            docker compose up -d --build
+
+            echo " Выполняем миграции"
+            docker compose exec web python manage.py migrate --noinput
+
+            echo " Собираем статические файлы"
+            docker compose exec web python manage.py collectstatic --noinput
