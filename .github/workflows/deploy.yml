@@ -9,35 +9,58 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: ${{ secrets.DB_NAME }}
-          POSTGRES_USER: ${{ secrets.DB_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
-        ports:
-          - "5432:5432"
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Setup Docker & Docker Compose
+      - name: Setup Docker
         run: |
+          # Удаляем старые версии
+          sudo apt remove -y docker docker-engine docker.io containerd runc || true
+          sudo apt autoremove -y
+
+          # Чистим остатки
+          sudo rm -rf /var/lib/docker /etc/docker || true
+
+          # Подготавливаем систему
           sudo apt update
-          sudo apt install -y docker.io docker-compose
+          sudo apt install -y \
+            apt-transport-https \
+            ca-certificates \
+            curl \
+            gnupg-agent \
+            software-properties-common
+
+          # Добавляем ключ Docker
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg  | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+          # Добавляем репозиторий Docker
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+          # Обновляем пакеты
+          sudo apt update
+
+          # Устанавливаем Docker
+          sudo apt install -y --allow-downgrades docker-ce docker-ce-cli containerd.io
+
+          # Проверяем установку
+          docker --version
+
+      - name: Install Docker Compose
+        run: |
+          DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
+          mkdir -p $DOCKER_CONFIG/cli-plugins
+          curl -SL https://github.com/docker/compose/releases/download/v2.26.1/docker-compose-linux-x86_64  -o $DOCKER_CONFIG/cli-plugins/docker-compose
+          chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
+          sudo ln -s $DOCKER_CONFIG/cli-plugins/docker-compose /usr/local/bin/docker-compose
+          docker-compose --version
 
       - name: Build Docker images
         run: |
           docker-compose build
 
-      - name: Start db and dependencies
+      - name: Start services
         run: |
           docker-compose up -d db redis mailhog
 
