@@ -3,6 +3,7 @@ name: CI/CD Pipeline with Docker
 on:
   push:
     branches:
+      - develop
       - feature_8_docker
 
 jobs:
