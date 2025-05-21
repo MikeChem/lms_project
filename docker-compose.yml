@@ -1,18 +1,28 @@
-version: '3.8'
-
-# Дефолтная сеть
-networks:
-  backend:
-    driver: bridge
-
-volumes:
-  postgres_data:
-  redis_data:
-  static_volume:
-  media_volume:
+# docker-compose.yml
 
 services:
-  # База данных PostgreSQL
+  web:
+    build: .
+    container_name: lms_web
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000
+    ports:
+      - "8001:8000"
+    env_file:
+      - .env
+    environment:
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,89.169.174.214"
+      DB_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - .:/app
+      - static_volume:/app/static
+      - media_volume:/app/media
+    networks:
+      - backend
+
   db:
     image: postgres:16
     container_name: lms_db
@@ -30,90 +40,20 @@ services:
     networks:
       - backend
 
-  # Redis
   redis:
     image: redis:7
     container_name: lms_redis
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
     networks:
       - backend
 
-  # MailHog для тестирования email
-  mailhog:
-    image: mailhog/mailhog
-    container_name: lms_mailhog
-    ports:
-      - "1025:1025"
-      - "8025:8025"
-    networks:
-      - backend
+networks:
+  backend:
+    driver: bridge
 
-  # Django web-приложение
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: lms_web
-    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000
-    ports:
-      - "8001:8000"
-    depends_on:
-      - db
-      - redis
-      - mailhog
-    env_file:
-      - .env
-    environment:
-      - ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS}
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379/0
-    volumes:
-      - .:/app
-      - static_volume:/app/static
-      - media_volume:/app/media
-    networks:
-      - backend
-
-  # Celery Worker
-  celery-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: lms_celery_worker
-    command: celery -A config worker --loglevel=info
-    depends_on:
-      - db
-      - redis
-    env_file:
-      - .env
-    environment:
-      - DB_HOST=db
-      - CELERY_BROKER_URL=redis://redis:6379/0
-    volumes:
-      - .:/app
-    networks:
-      - backend
-
-  # Celery Beat (периодические задачи)
-  celery-beat:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: lms_celery_beat
-    command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
-    depends_on:
-      - db
-      - redis
-    env_file:
-      - .env
-    environment:
-      - DB_HOST=db
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - DJANGO_CELERY_BEAT_SCHEDULE_FILENAME=/tmp/celerybeat-schedule
-    volumes:
-      - .:/app
-    networks:
-      - backend
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
