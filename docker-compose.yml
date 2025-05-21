@@ -52,29 +52,30 @@ services:
       - backend
 
   # Django web-приложение
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: lms_web
-    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000
-    ports:
-      - "8001:8000"
-    depends_on:
-      - db
-      - redis
-      - mailhog
-    env_file:
-      - .env
-    environment:
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379/0
-    volumes:
-      - .:/app
-      - static_volume:/app/static
-      - media_volume:/app/media
-    networks:
-      - backend
+web:
+  build:
+    context: .
+    dockerfile: Dockerfile
+  container_name: lms_web
+  command: gunicorn config.wsgi:application --bind 0.0.0.0:8000
+  ports:
+    - "8001:8000"
+  depends_on:
+    - db
+    - redis
+    - mailhog
+  env_file:
+    - .env
+  environment:
+    - ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS}
+    - DB_HOST=db
+    - REDIS_URL=redis://redis:6379/0
+  volumes:
+    - .:/app
+    - static_volume:/app/static
+    - media_volume:/app/media
+  networks:
+    - backend
 
   # Celery Worker
   celery-worker:
