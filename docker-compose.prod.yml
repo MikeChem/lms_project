@@ -1,16 +1,15 @@
 # docker-compose.prod.yml
-version: '3.8'
 
 services:
   web:
-    image: ghcr.io/ваш_логин/lms_web:latest
+    image: ghcr.io/mikechem/lms_web:latest
     container_name: lms_web
     ports:
       - "8001:8000"
     environment:
-      - ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS}
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379/0
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,89.169.174.214"
+      DB_HOST: db
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - db
       - redis
@@ -22,9 +21,9 @@ services:
     container_name: lms_db
     restart: always
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: lms
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Mike_Lash007
     ports:
       - "5432:5432"
     volumes:
@@ -40,9 +39,9 @@ services:
     networks:
       - backend
 
-volumes:
-  postgres_data:
-
 networks:
   backend:
     driver: bridge
+
+volumes:
+  postgres_data:

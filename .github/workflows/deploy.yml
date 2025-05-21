@@ -28,7 +28,9 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ghcr.io/${{ github.actor }}/lms_web:latest
+          tags: ghcr.io/mikechem/lms_web:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   deploy:
     needs: build-and-push
@@ -57,10 +59,10 @@ jobs:
             docker compose -f docker-compose.prod.yml down
 
             echo " Авторизуемся в GitHub Container Registry"
-            docker login ghcr.io -u $GITHUB_ACTOR --password-stdin <<< "${{ secrets.GITHUB_TOKEN }}"
+            docker login ghcr.io -u mikechem --password-stdin <<< "${{ secrets.SSH_DOCKER_REGISTRY_PASSWORD }}"
 
             echo " Скачиваем новый образ"
-            docker pull ghcr.io/${{ github.actor }}/lms_web:latest
+            docker pull ghcr.io/mikechem/lms_web:latest
 
             echo " Запускаем контейнеры"
             docker compose -f docker-compose.prod.yml up -d
