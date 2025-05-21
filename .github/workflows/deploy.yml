@@ -1,66 +1,37 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline with Docker
 
 on:
   push:
     branches:
-      - feature_8_docker
+      - feature_9_docker_cicd
 
 jobs:
-  test:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Setup Docker via get-docker.sh
-        run: |
-          # Удаляем старые версии
-          sudo apt remove -y docker docker-engine docker.io containerd runc || true
-          sudo rm -rf /var/lib/docker /etc/docker || true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-          # Ставим свежий Docker через официальный скрипт
-          curl -fsSL https://get.docker.com  -o get-docker.sh
-          sudo sh get-docker.sh
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-          # Проверяем установку
-          docker --version
-
-      - name: Install Docker Compose
-        run: |
-          DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
-          mkdir -p $DOCKER_CONFIG/cli-plugins
-          curl -SL https://github.com/docker/compose/releases/download/v2.26.1/docker-compose-linux-x86_64  \
-            -o $DOCKER_CONFIG/cli-plugins/docker-compose
-          chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
-          sudo ln -s $DOCKER_CONFIG/cli-plugins/docker-compose /usr/local/bin/docker-compose
-          docker-compose --version
-
-      - name: Build and Start Services
-        run: |
-          docker-compose build
-          docker-compose up -d db redis mailhog
-
-      - name: Wait for PostgreSQL to be ready
-        run: |
-          until docker-compose exec -T db pg_isready -h db -U $DB_USER -d $DB_NAME; do
-            echo "⏳ Waiting for PostgreSQL..."
-            sleep 5
-          done
-
-      - name: Apply migrations
-        run: |
-          docker-compose run --rm web python manage.py migrate
-
-      - name: Run tests in Django container
-        run: |
-          docker-compose run --rm web python manage.py test
-
-      - name: Run linter (flake8)
-        run: |
-          docker-compose run --rm web flake8 . --exit-zero
+      - name: Build and Push Web Image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.actor }}/lms_web:latest
 
   deploy:
-    needs: test
+    needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -79,17 +50,17 @@ jobs:
             echo " Получаем последние изменения из Git"
             git stash || true
             git fetch origin
-            git checkout feature_8_docker
-            git pull origin feature_8_docker
+            git checkout feature_9_docker_cicd
+            git pull origin feature_9_docker_cicd
 
             echo " Останавливаем текущие контейнеры"
-            docker compose down || true
+            docker compose -f docker-compose.prod.yml down
 
-            echo " Запускаем сборку и обновление контейнеров"
-            docker compose up -d --build
+            echo " Авторизуемся в GitHub Container Registry"
+            docker login ghcr.io -u $GITHUB_ACTOR --password-stdin <<< "${{ secrets.GITHUB_TOKEN }}"
 
-            echo " Выполняем миграции"
-            docker compose exec web python manage.py migrate --noinput
+            echo " Скачиваем новый образ"
+            docker pull ghcr.io/${{ github.actor }}/lms_web:latest
 
-            echo " Собираем статические файлы"
-            docker compose exec web python manage.py collectstatic --noinput
+            echo " Запускаем контейнеры"
+            docker compose -f docker-compose.prod.yml up -d
