@@ -6,7 +6,63 @@ on:
       - feature_9_docker_cicd
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Docker
+        run: |
+          sudo apt remove -y docker docker-engine docker.io containerd runc || true
+          sudo rm -rf /var/lib/docker /etc/docker || true
+
+          sudo apt update && sudo apt install -y \
+            apt-transport-https \
+            ca-certificates \
+            curl \
+            gnupg-agent \
+            software-properties-common
+
+          curl -fsSL https://get.docker.com  -o get-docker.sh
+          sudo sh get-docker.sh
+          sudo usermod -aG docker $USER
+
+          DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
+          mkdir -p $DOCKER_CONFIG/cli-plugins
+          curl -SL https://github.com/docker/compose/releases/download/v2.26.1/docker-compose-linux-x86_64  \
+            -o $DOCKER_CONFIG/cli-plugins/docker-compose
+          chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
+          sudo ln -s $DOCKER_CONFIG/cli-plugins/docker-compose /usr/local/bin/docker-compose
+
+          docker --version && docker-compose --version
+
+      - name: Build and Start Services
+        run: |
+          docker-compose build
+          docker-compose up -d db redis mailhog
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          until docker-compose exec -T db pg_isready -h db -U $DB_USER -d $DB_NAME; do
+            echo "⏳ Waiting for PostgreSQL..."
+            sleep 5
+          done
+
+      - name: Apply migrations
+        run: |
+          docker-compose run --rm web python manage.py migrate
+
+      - name: Run tests in Django container
+        run: |
+          docker-compose run --rm web python manage.py test
+
+      - name: Run linter (flake8)
+        run: |
+          docker-compose run --rm web flake8 . --exit-zero
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
