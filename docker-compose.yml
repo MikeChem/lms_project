@@ -17,6 +17,8 @@ services:
     image: postgres:16
     container_name: lms_db
     restart: always
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -62,11 +64,10 @@ services:
       - db
       - redis
       - mailhog
+    env_file:
+      - .env
     environment:
       - DB_HOST=db
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
       - REDIS_URL=redis://redis:6379/0
     volumes:
       - .:/app
@@ -85,11 +86,10 @@ services:
     depends_on:
       - db
       - redis
+    env_file:
+      - .env
     environment:
       - DB_HOST=db
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
       - CELERY_BROKER_URL=redis://redis:6379/0
     volumes:
       - .:/app
@@ -106,11 +106,10 @@ services:
     depends_on:
       - db
       - redis
+    env_file:
+      - .env
     environment:
       - DB_HOST=db
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
       - CELERY_BROKER_URL=redis://redis:6379/0
       - DJANGO_CELERY_BEAT_SCHEDULE_FILENAME=/tmp/celerybeat-schedule
     volumes:
